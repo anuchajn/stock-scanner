@@ -2,48 +2,67 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>สแกน QR / Barcode</title>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden; /* ป้องกัน scroll */
       background: #111;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
       font-family: 'Segoe UI', sans-serif;
       color: white;
     }
+
+    /* layout แบ่งเป็น 3 ส่วน flex ไม่ overflow */
+    #app {
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh; /* dynamic viewport height รองรับ mobile browser bar */
+    }
+
     #header {
-      width: 100%;
+      flex-shrink: 0;
       background: #92C83E;
-      padding: 14px;
+      padding: 12px;
       text-align: center;
-      font-size: 17px;
+      font-size: 16px;
       font-weight: bold;
     }
+
+    /* กล้องขยายเต็มพื้นที่ที่เหลือ */
     #camera-wrap {
+      flex: 1;
       position: relative;
-      width: 100%;
-      max-width: 480px;
+      overflow: hidden;
+      background: #000;
+      min-height: 0; /* สำคัญ — ป้องกัน flex child overflow */
     }
+
     #video {
       width: 100%;
-      display: block;
+      height: 100%;
+      object-fit: cover; /* เต็มกรอบไม่มีแถบดำ */
     }
+
     #scan-box {
       position: absolute;
       top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 65%; aspect-ratio: 1;
+      transform: translate(-50%, -60%);
+      width: min(65vw, 65vh);
+      height: min(65vw, 65vh);
       border: 3px solid #92C83E;
       border-radius: 14px;
       box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
       pointer-events: none;
     }
+
     #scan-line {
       position: absolute;
       top: 0; left: 0; right: 0;
@@ -51,67 +70,83 @@
       background: #92C83E;
       border-radius: 2px;
       animation: scan 2s linear infinite;
-      box-shadow: 0 0 8px #92C83E;
     }
+
     @keyframes scan {
       0%   { top: 5%; }
       50%  { top: 90%; }
       100% { top: 5%; }
     }
-    #status-bar {
-      width: 100%;
-      max-width: 480px;
-      padding: 14px 16px;
-      font-size: 15px;
-      text-align: center;
-      color: #ccc;
-      min-height: 52px;
+
+    /* ส่วนล่าง — status + result อยู่ใน flex-shrink:0 */
+    #bottom {
+      flex-shrink: 0;
+      background: #1a1a1a;
+      padding: 12px 16px;
+      min-height: 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
+
+    #status-bar {
+      font-size: 14px;
+      color: #ccc;
+      text-align: center;
+    }
+
     #result-box {
       display: none;
-      width: 90%;
-      max-width: 440px;
-      background: #1e1e1e;
-      border: 2px solid #92C83E;
-      border-radius: 14px;
-      padding: 18px;
-      text-align: center;
-      margin-top: 8px;
+      width: 100%;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
     }
+
     #result-text {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: bold;
       color: #92C83E;
       word-break: break-all;
-      margin-bottom: 16px;
+      text-align: center;
     }
+
+    #btn-row {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+    }
+
     #btn-send {
+      flex: 1;
       background: #92C83E;
       color: white;
       border: none;
-      padding: 12px 32px;
+      padding: 11px;
       border-radius: 25px;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: bold;
       cursor: pointer;
-      width: 100%;
-      margin-bottom: 10px;
     }
+
     #btn-rescan {
+      flex: 1;
       background: transparent;
       color: #92C83E;
       border: 2px solid #92C83E;
-      padding: 10px 32px;
+      padding: 11px;
       border-radius: 25px;
       font-size: 15px;
       cursor: pointer;
-      width: 100%;
     }
+
     canvas { display: none; }
   </style>
 </head>
 <body>
-
+<div id="app">
   <div id="header">📦 Stock Scanner</div>
 
   <div id="camera-wrap">
@@ -121,120 +156,115 @@
     </div>
   </div>
 
-  <div id="status-bar">🔍 กำลังเปิดกล้อง...</div>
-
-  <div id="result-box">
-    <div style="font-size:13px; color:#aaa; margin-bottom:8px;">พบข้อมูล:</div>
-    <div id="result-text"></div>
-    <button id="btn-send" onclick="sendToChat()">📤 ส่งเข้าแชทบอท</button>
-    <button id="btn-rescan" onclick="rescan()">🔄 สแกนใหม่</button>
+  <div id="bottom">
+    <div id="status-bar">🔍 กำลังเปิดกล้อง...</div>
+    <div id="result-box">
+      <div id="result-text"></div>
+      <div id="btn-row">
+        <button id="btn-send" onclick="sendToChat()">📤 ส่งเข้าแชทบอท</button>
+        <button id="btn-rescan" onclick="rescan()">🔄 สแกนใหม่</button>
+      </div>
+    </div>
   </div>
+</div>
 
-  <canvas id="canvas"></canvas>
+<canvas id="canvas"></canvas>
 
-  <script>
-    // =============================================
-    // ⚠️ แก้ตรงนี้อย่างเดียว ใส่ LIFF ID ของคุณ
-    const LIFF_ID = '2010280134-uKrH9FnT';
-    // =============================================
+<script>
+  const LIFF_ID = '2010280134-uKrH9FnT'; // ← ใส่ LIFF ID
 
-    let scanning = true;
-    let scannedData = '';
-    let videoStream = null;
+  let scanning = true;
+  let scannedData = '';
+  let stream = null;
 
-    async function init() {
-      try {
-        await liff.init({ liffId: LIFF_ID });
-        setStatus('🎥 กำลังขอสิทธิ์กล้อง...');
+  async function init() {
+    try {
+      await liff.init({ liffId: LIFF_ID });
+      setStatus('🎥 กำลังขอสิทธิ์กล้อง...');
 
-        videoStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' }, // กล้องหลัง (กล้องหลัก)
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        });
-
-        const video = document.getElementById('video');
-        video.srcObject = videoStream;
-        await video.play();
-
-        setStatus('📷 เล็งไปที่ QR Code หรือ Barcode');
-        requestAnimationFrame(scanFrame);
-
-      } catch (err) {
-        if (err.name === 'NotAllowedError') {
-          setStatus('❌ กรุณาอนุญาตใช้กล้องในการตั้งค่า แล้วโหลดใหม่');
-        } else {
-          setStatus('❌ เกิดข้อผิดพลาด: ' + err.message);
+      // ขอ permission ครั้งเดียว แล้ว reuse stream เดิม
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         }
-      }
-    }
-
-    function scanFrame() {
-      if (!scanning) return;
+      });
 
       const video = document.getElementById('video');
-      const canvas = document.getElementById('canvas');
+      video.srcObject = stream;
+      await video.play();
 
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        canvas.width  = video.videoWidth;
-        canvas.height = video.videoHeight;
-
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
-
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: 'dontInvert'
-        });
-
-        if (code && code.data) {
-          scanning = false;
-          scannedData = code.data;
-          showResult(code.data);
-          return;
-        }
-      }
-      requestAnimationFrame(scanFrame);
-    }
-
-    function showResult(data) {
-      setStatus('✅ สแกนสำเร็จ!');
-      document.getElementById('result-text').textContent = data;
-      document.getElementById('result-box').style.display = 'block';
-    }
-
-    async function sendToChat() {
-      const btn = document.getElementById('btn-send');
-      btn.textContent = '⏳ กำลังส่ง...';
-      btn.disabled = true;
-      try {
-        await liff.sendMessages([{
-          type: 'text',
-          text: scannedData   // ส่ง SKU กลับไปแชทบอทเลย
-        }]);
-        liff.closeWindow();
-      } catch (err) {
-        btn.textContent = '📤 ส่งเข้าแชทบอท';
-        btn.disabled = false;
-        setStatus('⚠️ ส่งไม่ได้: ' + err.message);
-      }
-    }
-
-    function rescan() {
-      scannedData = '';
-      scanning = true;
-      document.getElementById('result-box').style.display = 'none';
       setStatus('📷 เล็งไปที่ QR Code หรือ Barcode');
       requestAnimationFrame(scanFrame);
-    }
 
-    function setStatus(msg) {
-      document.getElementById('status-bar').textContent = msg;
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        setStatus('❌ กรุณาอนุญาตกล้องในการตั้งค่า แล้วกดรีโหลด');
+      } else {
+        setStatus('❌ ' + err.message);
+      }
     }
+  }
 
-    init();
-  </script>
+  function scanFrame() {
+    if (!scanning) return;
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'dontInvert'
+      });
+      if (code && code.data) {
+        scanning = false;
+        scannedData = code.data;
+        showResult(code.data);
+        return;
+      }
+    }
+    requestAnimationFrame(scanFrame);
+  }
+
+  function showResult(data) {
+    setStatus('');
+    document.getElementById('result-text').textContent = data;
+    document.getElementById('result-box').style.display = 'flex';
+  }
+
+  async function sendToChat() {
+    const btn = document.getElementById('btn-send');
+    btn.textContent = '⏳ กำลังส่ง...';
+    btn.disabled = true;
+    try {
+      await liff.sendMessages([{ type: 'text', text: scannedData }]);
+      liff.closeWindow();
+    } catch (err) {
+      btn.textContent = '📤 ส่งเข้าแชทบอท';
+      btn.disabled = false;
+      setStatus('⚠️ ส่งไม่ได้: ' + err.message);
+    }
+  }
+
+  function rescan() {
+    scannedData = '';
+    scanning = true;
+    document.getElementById('result-box').style.display = 'none';
+    setStatus('📷 เล็งไปที่ QR Code หรือ Barcode');
+    // reuse stream เดิม ไม่ขอ permission ใหม่
+    requestAnimationFrame(scanFrame);
+  }
+
+  function setStatus(msg) {
+    document.getElementById('status-bar').textContent = msg;
+  }
+
+  init();
+</script>
 </body>
 </html>
