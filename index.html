@@ -184,12 +184,22 @@
 
       // ขอ permission ครั้งเดียว แล้ว reuse stream เดิม
       stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        }
-      });
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        }).then(async (s) => {
+          // พยายามตั้ง focus หลังได้ stream แล้ว
+          // ถ้าเครื่องไม่รองรับก็ข้ามไปเงียบๆ ไม่ error
+          try {
+            const track = s.getVideoTracks()[0];
+            await track.applyConstraints({
+              advanced: [{ focusMode: 'continuous' }]
+            });
+          } catch (_) {}
+          return s;
+        });
 
       const video = document.getElementById('video');
       video.srcObject = stream;
