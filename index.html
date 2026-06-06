@@ -12,19 +12,18 @@
     html, body {
       width: 100%;
       height: 100%;
-      overflow: hidden; /* ป้องกัน scroll */
+      overflow: hidden;
       background: #111;
       font-family: 'Segoe UI', sans-serif;
       color: white;
     }
 
-    /* layout แบ่งเป็น 3 ส่วน flex ไม่ overflow */
     #app {
       display: flex;
       flex-direction: column;
       width: 100vw;
       height: 100vh;
-      height: 100dvh; /* dynamic viewport height รองรับ mobile browser bar */
+      height: 100dvh;
     }
 
     #header {
@@ -34,21 +33,35 @@
       text-align: center;
       font-size: 16px;
       font-weight: bold;
+      position: relative;
     }
 
-    /* กล้องขยายเต็มพื้นที่ที่เหลือ */
+    #btn-torch {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: 2px solid white;
+      color: white;
+      border-radius: 20px;
+      padding: 2px 12px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
     #camera-wrap {
       flex: 1;
       position: relative;
       overflow: hidden;
       background: #000;
-      min-height: 0; /* สำคัญ — ป้องกัน flex child overflow */
+      min-height: 0;
     }
 
     #video {
       width: 100%;
       height: 100%;
-      object-fit: cover; /* เต็มกรอบไม่มีแถบดำ */
+      object-fit: cover;
     }
 
     #scan-box {
@@ -78,7 +91,6 @@
       100% { top: 5%; }
     }
 
-    /* ส่วนล่าง — status + result อยู่ใน flex-shrink:0 */
     #bottom {
       flex-shrink: 0;
       background: #1a1a1a;
@@ -147,7 +159,10 @@
 </head>
 <body>
 <div id="app">
-  <div id="header">📦 Stock Scanner</div>
+  <div id="header">
+    📦 Stock Scanner
+    <button id="btn-torch" onclick="toggleTorch()">🔦 ไฟ</button>
+  </div>
 
   <div id="camera-wrap">
     <video id="video" autoplay playsinline muted></video>
@@ -171,35 +186,34 @@
 <canvas id="canvas"></canvas>
 
 <script>
-  const LIFF_ID = '2010280134-uKrH9FnT'; // ← ใส่ LIFF ID
+  const LIFF_ID = '2010280134-uKrH9FnT';
 
   let scanning = true;
   let scannedData = '';
   let stream = null;
+  let torchOn = false;
 
   async function init() {
     try {
       await liff.init({ liffId: LIFF_ID });
       setStatus('🎥 กำลังขอสิทธิ์กล้อง...');
 
-      // ขอ permission ครั้งเดียว แล้ว reuse stream เดิม
       stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        }).then(async (s) => {
-          // พยายามตั้ง focus หลังได้ stream แล้ว
-          // ถ้าเครื่องไม่รองรับก็ข้ามไปเงียบๆ ไม่ error
-          try {
-            const track = s.getVideoTracks()[0];
-            await track.applyConstraints({
-              advanced: [{ focusMode: 'continuous' }]
-            });
-          } catch (_) {}
-          return s;
-        });
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      }).then(async (s) => {
+        // ตั้ง continuous focus — ถ้าไม่รองรับข้ามเงียบๆ
+        try {
+          const track = s.getVideoTracks()[0];
+          await track.applyConstraints({
+            advanced: [{ focusMode: 'continuous' }]
+          });
+        } catch (_) {}
+        return s;
+      });
 
       const video = document.getElementById('video');
       video.srcObject = stream;
@@ -216,6 +230,41 @@
       }
     }
   }
+
+  async function toggleTorch() {
+    if (!stream) return;
+    try {
+      const track = stream.getVideoTracks()[0];
+      torchOn = !torchOn;
+      await track.applyConstraints({
+        advanced: [{ torch: torchOn }]
+      });
+      const btn = document.getElementById('btn-torch');
+      btn.style.background = torchOn ? 'rgba(255,255,255,0.3)' : 'transparent';
+      btn.textContent = torchOn ? '🔦 ปิดไฟ' : '🔦 ไฟ';
+    } catch (err) {
+      setStatus('⚠️ เครื่องนี้ไม่รองรับไฟฉายครับ');
+    }
+  }
+
+  async function turnOffTorch() {
+    if (!stream || !torchOn) return;
+    try {
+      const track = stream.getVideoTracks()[0];
+      await track.applyConstraints({
+        advanced: [{ torch: false }]
+      });
+      torchOn = false;
+    } catch (_) {}
+  }
+
+  // ปิดไฟอัตโนมัติเมื่อกด Home หรือสลับแอป
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') turnOffTorch();
+  });
+
+  // ปิดไฟเมื่อ LIFF ปิดหน้าต่าง
+  window.addEventListener('pagehide', () => turnOffTorch());
 
   function scanFrame() {
     if (!scanning) return;
@@ -252,6 +301,7 @@
     btn.textContent = '⏳ กำลังส่ง...';
     btn.disabled = true;
     try {
+      await turnOffTorch(); // ปิดไฟก่อนปิดหน้าต่าง
       await liff.sendMessages([{ type: 'text', text: scannedData }]);
       liff.closeWindow();
     } catch (err) {
@@ -266,7 +316,6 @@
     scanning = true;
     document.getElementById('result-box').style.display = 'none';
     setStatus('📷 เล็งไปที่ QR Code หรือ Barcode');
-    // reuse stream เดิม ไม่ขอ permission ใหม่
     requestAnimationFrame(scanFrame);
   }
 
